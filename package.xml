@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
+    <name>CCT Timing Pulleys</name>
+    <description>Open the CheapCADTools Timing Pulley generator in your browser and auto-import STEP/DXF downloads into the active FreeCAD document.</description>
+    <version>1.1.0</version>
+    <date>2026-05-22</date>
+    <maintainer email="support@cheapcadtools.com">CheapCADTools</maintainer>
+    <author email="support@cheapcadtools.com">CheapCADTools</author>
+    <license file="LICENSE">MIT</license>
+    <url type="website">https://cheapcadtools.com</url>
+    <url type="repository" branch="main">https://github.com/xootme/CCT-FreeCAD-TimingPulley</url>
+    <url type="bugtracker">https://github.com/xootme/CCT-FreeCAD-TimingPulley/issues</url>
+    <freecadmin>0.21</freecadmin>
+    <content>
+        <workbench>
+            <classname>CCTTimingPulleysWorkbench</classname>
+            <description>Timing belt pulley generator — opens the CCT web designer, auto-imports STEP/DXF downloads. Commands also appear under Part Design and Tools menus.</description>
+            <icon>Resources/icons/64x64.png</icon>
+            <tags>
+                <tag>pulley</tag>
+                <tag>timing-belt</tag>
+                <tag>generator</tag>
+                <tag>parametric</tag>
+                <tag>step</tag>
+                <tag>dxf</tag>
+            </tags>
+        </workbench>
+    </content>
+</package>
