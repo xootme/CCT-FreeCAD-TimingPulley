@@ -15,7 +15,7 @@
         <workbench>
             <classname>CCTTimingPulleysWorkbench</classname>
             <description>Timing belt pulley generator — opens the CCT web designer, auto-imports STEP/DXF downloads. Commands also appear under Part Design and Tools menus.</description>
-            <icon>Resources/icons/64x64.png</icon>
+            <icon>Resources/icons/CCT_TimingPulleys.svg</icon>
             <tags>
                 <tag>pulley</tag>
                 <tag>timing-belt</tag>

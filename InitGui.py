@@ -44,7 +44,7 @@ except Exception:
 class CCTTimingPulleysWorkbench(FreeCADGui.Workbench):
     MenuText = "CCT Timing Pulleys"
     ToolTip  = "CheapCADTools Timing Belt Pulley Generator"
-    Icon     = os.path.join(_ADDON_DIR, "Resources", "icons", "64x64.png")
+    Icon     = os.path.join(_ADDON_DIR, "Resources", "icons", "CCT_TimingPulleys.svg")
 
     def Initialize(self):
         self.appendToolbar("Timing Pulleys", _COMMANDS)
