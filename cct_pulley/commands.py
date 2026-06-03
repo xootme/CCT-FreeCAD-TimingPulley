@@ -279,8 +279,30 @@ class _SettingsCommand:
         dlg.exec_()
 
 
+# ── Timing Pulley panel (Part Design menu entry) ────────────────────────────
+
+class _TimingPulleyCommand:
+    """Opens the CCT Timing Pulleys side panel — the Part Design menu entry."""
+
+    def GetResources(self):
+        return {
+            "Pixmap":   _icon("CCT_TimingPulleys.svg"),
+            "MenuText": "Timing Pulley",
+            "ToolTip":  "Open the CCT Timing Pulley designer panel.\n"
+                        "Design pulleys in your browser; results auto-import here.",
+        }
+
+    def IsActive(self):
+        return True
+
+    def Activated(self):
+        from . import panel
+        panel.show()
+
+
 # ── Register with FreeCAD ───────────────────────────────────────────────────
 
+FreeCADGui.addCommand("CCT_TimingPulley",  _TimingPulleyCommand())
 FreeCADGui.addCommand("CCT_OpenDesigner",  _OpenDesignerCommand())
 FreeCADGui.addCommand("CCT_RestorePulley", _RestorePulleyCommand())
 FreeCADGui.addCommand("CCT_ImportHistory", _ImportHistoryCommand())
