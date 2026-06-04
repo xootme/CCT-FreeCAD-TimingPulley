@@ -36,16 +36,14 @@ def history_file() -> Path:
 def default_watch_dir() -> Path:
     """Where the web app's downloaded STEP/DXF files arrive.
 
-    Default: ~/Downloads/cct  (created on demand). Browsers vary in where they
-    write downloads; we use a dedicated subfolder the user explicitly aims for.
+    Default: ~/Downloads (standard Windows/Linux/macOS downloads folder).
+    The watcher filters for .step, .stp, and .dxf files only.
     """
     home = Path.home()
-    # Common Downloads folder locations
+    # Common Downloads folder locations (case-insensitive)
     for candidate in (home / "Downloads", home / "downloads"):
         if candidate.is_dir():
-            d = candidate / "cct"
-            d.mkdir(parents=True, exist_ok=True)
-            return d
+            return candidate
     # Fallback: addon data dir
     d = addon_data_dir() / "downloads"
     d.mkdir(parents=True, exist_ok=True)
