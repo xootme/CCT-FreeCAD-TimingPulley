@@ -15,26 +15,28 @@ class CCTTimingPulleysWorkbench(Workbench):
         self.__class__.Icon = os.path.join(
             addon_dir, "Resources", "icons", "CCT_TimingPulleys.svg"
         )
-
-    def Initialize(self):
-        """Called once on first workbench activation — register commands and inject menus."""
-        from cct_pulley import commands  # noqa: F401
-
-        # CCT workbench toolbar + menu (for users who switch to this workbench)
-        self.list = ["CCT_TimingPulley", "CCT_RestorePulley",
-                     "CCT_ImportHistory", "CCT_Settings"]
-        self.appendToolbar("CCT Timing Pulleys", self.list)
-        self.appendMenu("CCT Timing Pulleys", self.list)
-
-        # Inject "Timing Pulley" into Part Design menu via signal.
-        # Using a bound method (self._on_wb_activated) avoids the exec()
-        # shared-namespace issue — Python resolves it via self, not globals.
+        # Register commands and connect the workbenchActivated signal early
+        # (deferred 1 s so the main window exists) — this means "Timing Pulley"
+        # appears in the Part Design menu WITHOUT the user needing to activate
+        # the CCT workbench first.
         try:
+            try:
+                from PySide2 import QtCore
+            except ImportError:
+                from PySide6 import QtCore
+            QtCore.QTimer.singleShot(1000, self._early_setup)
+        except Exception:
+            pass
+
+    def _early_setup(self):
+        """Deferred startup: register commands and hook workbenchActivated."""
+        try:
+            from cct_pulley import commands  # noqa: F401
             import FreeCADGui as _Gui
             mw = _Gui.getMainWindow()
             if mw is not None:
                 mw.workbenchActivated.connect(self._on_wb_activated)
-                # Handle case where Part Design is already active at load time
+                # If Part Design is already active when FreeCAD finishes loading
                 try:
                     active = _Gui.activeWorkbench()
                     if active and active.__class__.__name__ == "PartDesignWorkbench":
@@ -43,6 +45,19 @@ class CCTTimingPulleysWorkbench(Workbench):
                     pass
         except Exception:
             pass
+
+    def Initialize(self):
+        """Called once when CCT workbench is first activated — set up toolbar/menu."""
+        # Commands may already be registered by _early_setup; importing again is safe.
+        try:
+            from cct_pulley import commands  # noqa: F401
+        except Exception:
+            pass
+
+        self.list = ["CCT_TimingPulley", "CCT_RestorePulley",
+                     "CCT_ImportHistory", "CCT_Settings"]
+        self.appendToolbar("CCT Timing Pulleys", self.list)
+        self.appendMenu("CCT Timing Pulleys", self.list)
 
         try:
             from cct_pulley import watcher

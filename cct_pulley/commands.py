@@ -286,7 +286,7 @@ class _TimingPulleyCommand:
 
     def GetResources(self):
         return {
-            "Pixmap":   _icon("CCT_TimingPulleys.svg"),
+            "Pixmap":   _icon("64x64.png"),
             "MenuText": "Timing Pulley",
             "ToolTip":  "Open the CCT Timing Pulley designer panel.\n"
                         "Design pulleys in your browser; results auto-import here.",
