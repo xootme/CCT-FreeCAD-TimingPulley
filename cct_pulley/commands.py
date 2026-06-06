@@ -17,7 +17,7 @@ from pathlib import Path
 import FreeCAD
 import FreeCADGui
 
-from . import config, importer, paths, watcher
+from . import config, importer, paths, watcher, session
 
 
 _ADDON_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -52,12 +52,9 @@ class _OpenDesignerCommand:
             f"      save your browser downloads there to auto-import\n"
         )
 
+        # Create session and register machine_id via API
         url = paths.designer_url()
-        # Pass machine_id as a query param so a future server endpoint can
-        # enforce per-machine trial limits without breaking the file-watcher UX.
-        sep = "&" if "?" in url else "?"
-        url = f"{url}{sep}freecad=1&mid={paths.machine_id()}"
-        webbrowser.open(url)
+        session.open_designer_with_session(url)
 
 
 # ── Restore design ──────────────────────────────────────────────────────────

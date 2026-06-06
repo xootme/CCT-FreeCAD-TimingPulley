@@ -10,7 +10,7 @@ except ImportError:
 
 import FreeCADGui
 
-from . import config, paths, watcher
+from . import config, paths, watcher, session
 
 _CCT_RED   = "#761516"
 _CCT_GRAY  = "#eaebed"
@@ -256,17 +256,13 @@ class CCTDockPanel(QtWidgets.QDockWidget):
         result = _FreeTrialDialog.confirm(self)
         if result == "free":
             url = paths.designer_url()
-            sep = "&" if "?" in url else "?"
-            webbrowser.open(f"{url}{sep}freecad=1&mid={paths.machine_id()}")
+            session.open_designer_with_session(url)
             watcher.ensure_started()
 
     def _open_paid(self):
         local = paths.local_pulleyapp_url()
         if local:
-            sep = "&" if "?" in local else "?"
-            webbrowser.open(
-                f"{local}/tools/pulleys{sep}freecad=1&mid={paths.machine_id()}"
-            )
+            session.open_designer_with_session(f"{local}/tools/pulleys")
         watcher.ensure_started()
 
     def _restore(self):
