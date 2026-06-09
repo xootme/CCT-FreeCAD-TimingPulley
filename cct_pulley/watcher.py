@@ -38,7 +38,10 @@ def _on_dir_changed(path: str) -> None:
                 continue
             if _seen.get(fname) != mtime:
                 _seen[fname] = mtime
-                importer.import_file(fp)
+                if importer.has_cct_signature(fp):
+                    importer.import_file(fp)
+                else:
+                    FreeCAD.Console.PrintLog(f"[CCT] skipped {fname} (no CCT signature)\n")
     except Exception as e:
         FreeCAD.Console.PrintWarning(f"[CCT] watcher scan failed: {e}\n")
 

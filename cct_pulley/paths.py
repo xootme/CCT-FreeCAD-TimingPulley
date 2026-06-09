@@ -44,8 +44,8 @@ def default_watch_dir() -> Path:
     for candidate in (home / "Downloads", home / "downloads"):
         if candidate.is_dir():
             return candidate
-    # Fallback: addon data dir
-    d = addon_data_dir() / "downloads"
+    # Fallback: create the standard Downloads folder
+    d = home / "Downloads"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -110,10 +110,16 @@ WEB_BASE = "https://cheapcadtools.com"
 
 def designer_url() -> str:
     """Pick the designer URL — local PulleyApp if installed, else hosted."""
-    return (local_pulleyapp_url() or WEB_BASE) + "/tools/pulleys"
+    local = local_pulleyapp_url()
+    if local:
+        return local + "/"          # local dev server serves at root /
+    return WEB_BASE + "/tools/pulleys"
 
 
 def restore_url(params_qs: str) -> str:
     """Build a designer URL with parameters from a restored design."""
-    base = local_pulleyapp_url() or WEB_BASE
-    return f"{base}/tools/pulleys?{params_qs}" if params_qs else f"{base}/tools/pulleys"
+    local = local_pulleyapp_url()
+    if local:
+        return f"{local}/?{params_qs}" if params_qs else f"{local}/"
+    base = WEB_BASE + "/tools/pulleys"
+    return f"{base}?{params_qs}" if params_qs else base

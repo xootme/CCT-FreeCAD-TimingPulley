@@ -216,6 +216,7 @@ class CCTDockPanel(QtWidgets.QDockWidget):
             ("Restore Design from File…", self._restore),
             ("Import History…",           self._history),
             ("Settings…",                 self._settings),
+            ("Instruction Video",         self._video),
         ):
             btn = QtWidgets.QPushButton(label)
             btn.setStyleSheet(
@@ -255,14 +256,15 @@ class CCTDockPanel(QtWidgets.QDockWidget):
     def _open_free(self):
         result = _FreeTrialDialog.confirm(self)
         if result == "free":
-            url = paths.designer_url()
+            # Free trial always uses the hosted web app — never local
+            url = paths.WEB_BASE + "/tools/pulleys"
             session.open_designer_with_session(url)
             watcher.ensure_started()
 
     def _open_paid(self):
         local = paths.local_pulleyapp_url()
         if local:
-            session.open_designer_with_session(f"{local}/tools/pulleys")
+            session.open_designer_with_session(f"{local}/")
         watcher.ensure_started()
 
     def _restore(self):
@@ -273,6 +275,9 @@ class CCTDockPanel(QtWidgets.QDockWidget):
 
     def _settings(self):
         FreeCADGui.runCommand("CCT_Settings")
+
+    def _video(self):
+        webbrowser.open("https://www.youtube.com/watch?v=UP1FnCfZPzc")
 
 
 def _hline():

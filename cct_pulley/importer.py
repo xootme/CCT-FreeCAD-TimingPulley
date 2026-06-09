@@ -102,6 +102,33 @@ def load_history() -> list[dict]:
         return []
 
 
+# ── CCT signature check ──────────────────────────────────────────────────────
+
+def has_cct_signature(filepath: str | Path) -> bool:
+    """Return True if the file carries a CCT signature block.
+
+    Reads only the bytes where the marker is known to appear:
+      STEP/STP — comment inserted between ENDSEC and DATA (first 4 KB)
+      DXF      — group-code 999 comment before EOF marker (last 2 KB)
+    """
+    try:
+        p = Path(filepath)
+        ext = p.suffix.lower()
+        size = p.stat().st_size
+        if ext in (".step", ".stp"):
+            with open(p, "rb") as f:
+                head = f.read(4096).decode("utf-8", errors="replace")
+            return "/* CCT:" in head
+        elif ext == ".dxf":
+            with open(p, "rb") as f:
+                f.seek(max(0, size - 2048))
+                tail = f.read().decode("utf-8", errors="replace")
+            return "999\nCCT:" in tail
+    except Exception:
+        pass
+    return False
+
+
 # ── File import (called from watcher event on Qt main thread) ───────────────
 
 IMPORT_EXTS = {".step", ".stp", ".dxf"}
