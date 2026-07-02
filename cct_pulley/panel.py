@@ -396,21 +396,50 @@ class _LicenceDialog(QtWidgets.QDialog):
 
         result = _license.activate(key)
 
-        self._btn_activate.setEnabled(True)
-        self._btn_activate.setText("Activate")
-
-        if result.get("ok"):
-            until = result.get("valid_until", "")[:10]
-            self._status.setText(
-                f"<span style='color:#27ae60;'>&#10003; Activated! Valid until {until}.<br>"
-                f"Download PulleyApp from your order email or "
-                f"<a href='https://cheapcadtools.com'>cheapcadtools.com</a>.</span>"
-            )
-            self._status.setOpenExternalLinks(True)
-            self._btn_activate.setEnabled(False)
-        else:
+        if not result.get("ok"):
             msg = result.get("error", "Activation failed.")
             self._status.setText(f"<span style='color:#c0392b;'>&#10007; {msg}</span>")
+            self._btn_activate.setEnabled(True)
+            self._btn_activate.setText("Activate")
+            return
+
+        # Key valid — start downloading in a background thread
+        app_url = result.get("app_url", "")
+        self._status.setText("<span style='color:#27ae60;'>&#10003; Key accepted — downloading PulleyApp…</span>")
+        QtWidgets.QApplication.processEvents()
+
+        import threading
+
+        def _install():
+            def _progress(msg):
+                self._status.setText(f"<span style='color:#27ae60;'>{msg}</span>")
+                QtWidgets.QApplication.processEvents()
+
+            ok = server.download_and_install(app_url, progress_cb=_progress)
+            if ok:
+                until = result.get("valid_until", "")[:10]
+                self._status.setText(
+                    f"<span style='color:#27ae60;'>&#10003; Installed! Valid until {until}.<br>"
+                    f"Click <b>Launch</b> to start the local app.</span>"
+                )
+                self._btn_activate.setText("Launch")
+                self._btn_activate.setEnabled(True)
+                self._btn_activate.clicked.disconnect()
+                self._btn_activate.clicked.connect(self._do_launch)
+            else:
+                self._status.setText(
+                    "<span style='color:#c0392b;'>&#10007; Download failed — "
+                    "check your internet connection and try again.</span>"
+                )
+                self._btn_activate.setText("Retry")
+                self._btn_activate.setEnabled(True)
+
+        threading.Thread(target=_install, daemon=True).start()
+
+    def _do_launch(self):
+        self._btn_activate.setEnabled(False)
+        self.accept()
+        server.ensure_running()
 
     @classmethod
     def show_and_activate(cls, parent=None):

@@ -12,8 +12,10 @@ import atexit
 import json
 import os
 import subprocess
+import tempfile
 import time
 import urllib.request
+import zipfile
 
 import FreeCAD
 
@@ -126,3 +128,64 @@ def stop_if_we_started() -> None:
 
 # Register so FreeCAD process exit triggers clean shutdown.
 atexit.register(stop_if_we_started)
+
+
+_INSTALL_DIR = os.path.join(_APPDATA, "CheapCADTools", "PulleyApp")
+_FALLBACK_URL = "https://github.com/xootme/PulleyApp-releases/releases/latest/download/PulleyApp.zip"
+
+
+def download_and_install(app_url: str = '', progress_cb=None) -> bool:
+    """Download PulleyApp.zip and extract to %APPDATA%\\CheapCADTools\\PulleyApp.
+
+    progress_cb(msg: str) — called with status strings during download/install.
+    Returns True on success, False on failure.
+    """
+    url = app_url or _FALLBACK_URL
+
+    def _report(msg):
+        FreeCAD.Console.PrintMessage(f"[CCT] {msg}\n")
+        if progress_cb:
+            progress_cb(msg)
+
+    _report("Downloading PulleyApp…")
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+            tmp_path = tmp.name
+
+        def _reporthook(block, block_size, total):
+            if total > 0 and progress_cb:
+                pct = min(100, int(block * block_size * 100 / total))
+                progress_cb(f"Downloading… {pct}%")
+
+        urllib.request.urlretrieve(url, tmp_path, _reporthook)
+        _report("Installing…")
+
+        os.makedirs(_INSTALL_DIR, exist_ok=True)
+        with zipfile.ZipFile(tmp_path, 'r') as zf:
+            for member in zf.namelist():
+                # Strip leading "PulleyApp/" folder from zip paths
+                parts = member.split('/', 1)
+                target = parts[1] if len(parts) > 1 else member
+                if not target:
+                    continue
+                dest = os.path.join(_INSTALL_DIR, target)
+                if member.endswith('/'):
+                    os.makedirs(dest, exist_ok=True)
+                else:
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    with zf.open(member) as src, open(dest, 'wb') as dst:
+                        dst.write(src.read())
+
+        os.unlink(tmp_path)
+        _report("PulleyApp installed successfully.")
+        return True
+
+    except Exception as exc:
+        FreeCAD.Console.PrintError(f"[CCT] Install failed: {exc}\n")
+        if progress_cb:
+            progress_cb(f"Install failed: {exc}")
+        try:
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+        return False
