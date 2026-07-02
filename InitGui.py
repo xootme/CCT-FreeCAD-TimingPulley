@@ -101,7 +101,13 @@ class CCTTimingPulleysWorkbench(Workbench):
             pass
 
     def Deactivated(self):
-        pass
+        # Belt-and-suspenders: also stop the server when the workbench is
+        # torn down (atexit already handles the clean-exit case).
+        try:
+            from cct_pulley import server
+            server.stop_if_we_started()
+        except Exception:
+            pass
 
     def GetClassName(self):
         return "Gui::PythonWorkbench"

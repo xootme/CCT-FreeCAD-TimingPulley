@@ -9,9 +9,7 @@ from __future__ import annotations
 
 import datetime
 import json
-import os
 import re
-import shutil
 from pathlib import Path
 from typing import Optional
 
@@ -134,19 +132,19 @@ def has_cct_signature(filepath: str | Path) -> bool:
 IMPORT_EXTS = {".step", ".stp", ".dxf"}
 
 
-def ensure_active_doc():
+def ensure_active_doc(name: str = 'CCT_Pulley'):
     """Return the active document, creating a new one if none exists."""
     doc = FreeCAD.ActiveDocument
     if doc is None:
-        doc = FreeCAD.newDocument("CCT_Pulley")
+        doc = FreeCAD.newDocument(name)
     return doc
 
 
 def import_file(filepath: str | Path) -> bool:
     """Import a STEP or DXF file into the active FreeCAD document.
 
-    Returns True on success. Moves the imported file to <watch>/imported/
-    so the watcher doesn't fire on it again.
+    Returns True on success. Leaves the file in the watch folder so the user
+    keeps a copy; the watcher's mtime tracking prevents a re-import.
     """
     filepath = Path(filepath)
     if not filepath.exists():
@@ -156,12 +154,20 @@ def import_file(filepath: str | Path) -> bool:
         return False
 
     try:
-        doc = ensure_active_doc()
+        doc = ensure_active_doc(filepath.stem)
         before_objs = set(o.Name for o in doc.Objects)
 
         if ext in (".step", ".stp"):
-            import Part
-            Part.insert(str(filepath), doc.Name)
+            # Import.insert() uses the OpenCASCADE XDE reader, which reads
+            # PRODUCT names from the STEP file so shapes appear correctly
+            # named in the model tree. Part.insert() ignores PRODUCT names
+            # and falls back to the FILE_NAME header for every shape.
+            try:
+                import Import
+                Import.insert(str(filepath), doc.Name)
+            except Exception:
+                import Part
+                Part.insert(str(filepath), doc.Name)
         elif ext == ".dxf":
             import importDXF
             importDXF.insert(str(filepath), doc.Name)
@@ -186,13 +192,9 @@ def import_file(filepath: str | Path) -> bool:
         # History bookkeeping
         record_import(filepath.name, ext.lstrip(".").upper(), params)
 
-        # Move file out of the watch folder so it isn't re-imported on every poll
-        imported_dir = filepath.parent / "imported"
-        imported_dir.mkdir(exist_ok=True)
-        dest = imported_dir / filepath.name
-        if dest.exists():
-            dest.unlink()
-        shutil.move(str(filepath), str(dest))
+        # Leave the imported file in the watch folder so the user keeps a copy
+        # in CCT_Import/. The watcher's mtime tracking prevents a re-import; a
+        # fresh download (new mtime) re-imports.
 
         # Fit the view
         try:

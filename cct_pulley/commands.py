@@ -17,7 +17,7 @@ from pathlib import Path
 import FreeCAD
 import FreeCADGui
 
-from . import config, importer, paths, watcher, session
+from . import config, importer, paths, server, watcher, session  # noqa: F401 (watcher used in _do_uninstall)
 
 
 _ADDON_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -52,7 +52,10 @@ class _OpenDesignerCommand:
             f"      save your browser downloads there to auto-import\n"
         )
 
-        # Create session and register machine_id via API
+        # Ensure the local server is running (start it if we own the exe).
+        server.ensure_running()
+
+        # Open the designer (local if server is up, hosted otherwise).
         url = paths.designer_url()
         session.open_designer_with_session(url)
 
@@ -81,7 +84,7 @@ class _RestorePulleyCommand:
         filepath, _ = QtWidgets.QFileDialog.getOpenFileName(
             parent,
             "Select an exported CheapCAD Tools file",
-            str(Path.home()),
+            str(paths.default_watch_dir()),
             "CAD files (*.step *.stp *.dxf *.svg *.stl);;All files (*)",
         )
         if not filepath:
@@ -214,17 +217,19 @@ class _SettingsCommand:
 
     def Activated(self):
         try:
-            from PySide2 import QtWidgets
+            from PySide2 import QtWidgets, QtCore
         except ImportError:
-            from PySide6 import QtWidgets
+            from PySide6 import QtWidgets, QtCore
 
         parent = FreeCADGui.getMainWindow()
         cfg = config.load()
 
         dlg = QtWidgets.QDialog(parent)
         dlg.setWindowTitle("CCT Timing Pulleys — Settings")
-        dlg.resize(560, 200)
-        form = QtWidgets.QFormLayout(dlg)
+        dlg.resize(560, 260)
+        layout = QtWidgets.QVBoxLayout(dlg)
+        form = QtWidgets.QFormLayout()
+        layout.addLayout(form)
 
         # Watch dir row
         watch_row = QtWidgets.QHBoxLayout()
@@ -256,7 +261,7 @@ class _SettingsCommand:
         )
         form.addRow("Status:", QtWidgets.QLabel(status_text))
 
-        # Buttons
+        # Save / Cancel buttons
         btns = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel,
             parent=dlg,
@@ -268,12 +273,146 @@ class _SettingsCommand:
             new_cfg["watch_dir"]   = watch_edit.text().strip()
             new_cfg["auto_import"] = auto_chk.isChecked()
             config.save(new_cfg)
-            watcher.ensure_started()  # picks up the new path
+            watcher.ensure_started()
             dlg.accept()
 
         btns.accepted.connect(save)
         btns.rejected.connect(dlg.reject)
+
+        # ── Danger zone ─────────────────────────────────────────────────────
+        sep = QtWidgets.QFrame()
+        sep.setFrameShape(QtWidgets.QFrame.HLine)
+        sep.setFrameShadow(QtWidgets.QFrame.Sunken)
+        layout.addWidget(sep)
+
+        danger_row = QtWidgets.QHBoxLayout()
+        danger_row.addStretch()
+        uninstall_btn = QtWidgets.QPushButton("Uninstall CCT Addin…")
+        uninstall_btn.setStyleSheet(
+            "QPushButton { color:#c0392b; border:1px solid #c0392b; background:transparent;"
+            " padding:5px 14px; border-radius:4px; font-size:11px; }"
+            "QPushButton:hover { background:#fdf0ef; }"
+        )
+        uninstall_btn.clicked.connect(lambda: _do_uninstall(dlg, parent))
+        danger_row.addWidget(uninstall_btn)
+        layout.addLayout(danger_row)
+
         dlg.exec_()
+
+
+def _do_uninstall(settings_dlg, parent):
+    """Uninstall the CCT addin.
+
+    Strategy: delete user data now (no live file locks), write a cleanup
+    script that removes the addon folder after FreeCAD exits, then close
+    FreeCAD so the OS releases all file handles before the script runs.
+    """
+    import shutil
+    import subprocess
+    import sys
+    import tempfile
+
+    try:
+        from PySide2 import QtWidgets, QtCore
+    except ImportError:
+        from PySide6 import QtWidgets, QtCore
+
+    # ── Confirm ──────────────────────────────────────────────────────────────
+    confirm = QtWidgets.QMessageBox(parent)
+    confirm.setWindowTitle("Uninstall CCT Timing Pulleys")
+    confirm.setIcon(QtWidgets.QMessageBox.Warning)
+    confirm.setText(
+        "<b>Uninstall CCT Timing Pulleys?</b><br><br>"
+        "This will:<br>"
+        "&bull;&nbsp; Remove your config, import history, and licence file<br>"
+        "&bull;&nbsp; Delete the addon folder from FreeCAD<br>"
+        "&bull;&nbsp; Close FreeCAD to complete the process<br><br>"
+        "<b>Save any open work before continuing.</b>"
+    )
+    confirm.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.Cancel)
+    confirm.setDefaultButton(QtWidgets.QMessageBox.Cancel)
+    confirm.button(QtWidgets.QMessageBox.Yes).setText("Uninstall && Close FreeCAD")
+    if confirm.exec_() != QtWidgets.QMessageBox.Yes:
+        return
+
+    addon_dir = Path(_ADDON_DIR)
+
+    # ── Stop background services ──────────────────────────────────────────────
+    try:
+        watcher.stop()
+    except Exception:
+        pass
+    try:
+        server.stop_if_we_started()
+    except Exception:
+        pass
+
+    # ── Delete user data (no file locks on these) ─────────────────────────────
+    try:
+        shutil.rmtree(str(paths.addon_data_dir()), ignore_errors=True)
+    except Exception:
+        pass
+
+    # ── Write a cleanup script that deletes files then relaunches FreeCAD ────
+    pulleyapp_dir = os.path.join(
+        os.environ.get("APPDATA") or os.path.expanduser("~"),
+        "CheapCADTools", "PulleyApp",
+    )
+    freecad_exe = os.path.join(os.path.dirname(sys.executable), "FreeCAD.exe")
+    if not os.path.isfile(freecad_exe):
+        freecad_exe = os.path.join(os.path.dirname(sys.executable), "FreeCAD")
+
+    if sys.platform == "win32":
+        script = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".bat", delete=False, encoding="utf-8"
+        )
+        # Wait for FreeCAD to fully exit, delete everything, then relaunch.
+        script.write(
+            "@echo off\n"
+            "ping -n 4 127.0.0.1 >nul\n"
+            f'taskkill /f /im PulleyApp.exe >nul 2>&1\n'
+            f'rmdir /s /q "{addon_dir}"\n'
+            f'rmdir /s /q "{pulleyapp_dir}"\n'
+            f'start "" "{freecad_exe}"\n'
+        )
+        script.close()
+        subprocess.Popen(
+            ["cmd", "/c", script.name],
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+    else:
+        script = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".sh", delete=False, encoding="utf-8"
+        )
+        script.write(
+            "#!/bin/sh\n"
+            "sleep 3\n"
+            f'pkill -f PulleyApp 2>/dev/null\n'
+            f'rm -rf "{addon_dir}"\n'
+            f'rm -rf "{pulleyapp_dir}"\n'
+            f'"{freecad_exe}" &\n'
+        )
+        script.close()
+        os.chmod(script.name, 0o755)
+        subprocess.Popen(["/bin/sh", script.name])
+
+    # ── Close settings dialog ────────────────────────────────────────────────
+    settings_dlg.accept()
+
+    # Show what will be deleted and let the user dismiss before FreeCAD closes.
+    info = QtWidgets.QMessageBox(parent)
+    info.setWindowTitle("Uninstall Complete")
+    info.setIcon(QtWidgets.QMessageBox.Information)
+    info.setText(
+        "CCT Timing Pulleys has been uninstalled.\n\n"
+        "Click OK to restart FreeCAD."
+    )
+    info.setStandardButtons(QtWidgets.QMessageBox.Ok)
+    info.exec_()
+
+    # Close this FreeCAD instance — the batch script relaunches it after
+    # deleting the addon folder, ensuring the clean version loads.
+    FreeCADGui.getMainWindow().close()
 
 
 # ── Timing Pulley panel (Part Design menu entry) ────────────────────────────

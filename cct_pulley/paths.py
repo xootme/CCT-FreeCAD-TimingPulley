@@ -34,18 +34,18 @@ def history_file() -> Path:
 
 
 def default_watch_dir() -> Path:
-    """Where the web app's downloaded STEP/DXF files arrive.
+    """Where the web app's mirrored STEP/DXF files arrive.
 
-    Default: ~/Downloads (standard Windows/Linux/macOS downloads folder).
-    The watcher filters for .step, .stp, and .dxf files only.
+    Uses ~/Downloads/CCT_Import so the watcher only sees files mirrored from
+    the local app, not every browser download landing in ~/Downloads.
     """
     home = Path.home()
-    # Common Downloads folder locations (case-insensitive)
     for candidate in (home / "Downloads", home / "downloads"):
         if candidate.is_dir():
-            return candidate
-    # Fallback: create the standard Downloads folder
-    d = home / "Downloads"
+            d = candidate / "CCT_Import"
+            d.mkdir(parents=True, exist_ok=True)
+            return d
+    d = home / "Downloads" / "CCT_Import"
     d.mkdir(parents=True, exist_ok=True)
     return d
 

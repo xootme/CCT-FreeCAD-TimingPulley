@@ -33,4 +33,15 @@ def save(data: dict[str, Any]) -> None:
 
 def watch_dir() -> str:
     cfg = load()
-    return cfg.get("watch_dir") or str(paths.default_watch_dir())
+    saved = cfg.get("watch_dir") or ""
+    default = paths.default_watch_dir()
+    if not saved:
+        return str(default)
+    # Migrate: if saved path is exactly the Downloads folder (no CCT_Import), upgrade it.
+    from pathlib import Path
+    saved_path = Path(saved)
+    if saved_path == default.parent and saved_path.name.lower() != "cct_import":
+        new_dir = str(default)
+        save({**cfg, "watch_dir": new_dir})
+        return new_dir
+    return saved

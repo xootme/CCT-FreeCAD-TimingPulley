@@ -1,6 +1,7 @@
 """CCT Timing Pulleys dock panel."""
 from __future__ import annotations
 
+import os
 import webbrowser
 
 try:
@@ -10,11 +11,11 @@ except ImportError:
 
 import FreeCADGui
 
-from . import config, paths, watcher, session
+from . import config, paths, server, watcher, session, license as _license
 
 _CCT_RED   = "#761516"
 _CCT_GRAY  = "#eaebed"
-_PAID_URL  = "https://cheapcadtools.com/tools/pulleys"   # TODO: update to paid page
+_PAID_URL  = "https://cheapcadtools.com/product/freecad-timing-pulley-addin/"
 
 
 def show():
@@ -232,22 +233,59 @@ class CCTDockPanel(QtWidgets.QDockWidget):
 
     def _refresh(self):
         local_url = paths.local_pulleyapp_url()
+        exe_installed = server.is_installed()
+        paid_active = local_url or exe_installed
+
         if local_url:
             self.lbl_status.setText(
                 "<span style='color:#27ae60'>&#9679; Local app running</span>"
             )
-            self.btn_paid.setEnabled(True)
             self.btn_paid.setToolTip(
                 f"Open local PulleyApp on {local_url} — unlimited downloads"
             )
+        elif exe_installed:
+            self.lbl_status.setText(
+                "<span style='color:#e67e22'>&#9679; Local app installed (not running)</span>"
+            )
+            self.btn_paid.setToolTip(
+                "Click to start the local PulleyApp and open the designer."
+            )
         else:
             self.lbl_status.setText(
-                "<span style='color:#aaa'>&#9675; Local app not running</span>"
+                "<span style='color:#aaa'>&#9675; Local app not installed</span>"
             )
-            self.btn_paid.setEnabled(False)
             self.btn_paid.setToolTip(
-                "Local app not detected.\n"
-                "Get it at cheapcadtools.com — $9.99/yr, 30% donated to FreeCAD."
+                "Enter your licence key to activate the local PulleyApp.\n"
+                "Purchase at cheapcadtools.com — $9.99/yr."
+            )
+
+        # btn_paid is always enabled — when not installed it opens the licence dialog
+        self.btn_paid.setEnabled(True)
+
+        if paid_active:
+            self.btn_paid.setStyleSheet(
+                f"QPushButton {{ background:{_CCT_RED}; color:white; font-weight:bold;"
+                f" padding:9px 12px; border-radius:4px; font-size:13px; border:none; }}"
+                f"QPushButton:hover {{ background:#9b1e1e; }}"
+                f"QPushButton:pressed {{ background:#5a1010; }}"
+            )
+            self.btn_free.setStyleSheet(
+                "QPushButton { background:#eaebed; color:#aaa; padding:7px 12px;"
+                " border-radius:4px; font-size:13px; border:1px solid #bbb; }"
+                "QPushButton:hover { background:#d4d5d7; color:#333; }"
+            )
+        else:
+            # Not installed — secondary style but still clickable (opens licence dialog)
+            self.btn_paid.setStyleSheet(
+                "QPushButton { background:#eaebed; color:#555; padding:9px 12px;"
+                " border-radius:4px; font-size:13px; border:1px solid #bbb; }"
+                "QPushButton:hover { background:#d4d5d7; }"
+            )
+            self.btn_free.setStyleSheet(
+                f"QPushButton {{ background:{_CCT_RED}; color:white; font-weight:bold;"
+                f" padding:9px 12px; border-radius:4px; font-size:13px; border:none; }}"
+                f"QPushButton:hover {{ background:#9b1e1e; }}"
+                f"QPushButton:pressed {{ background:#5a1010; }}"
             )
 
         watch_dir = config.watch_dir()
@@ -262,6 +300,10 @@ class CCTDockPanel(QtWidgets.QDockWidget):
             watcher.ensure_started()
 
     def _open_paid(self):
+        if not server.is_installed():
+            _LicenceDialog.show_and_activate(self)
+            return
+        server.ensure_running()
         local = paths.local_pulleyapp_url()
         if local:
             session.open_designer_with_session(f"{local}/")
@@ -278,6 +320,102 @@ class CCTDockPanel(QtWidgets.QDockWidget):
 
     def _video(self):
         webbrowser.open("https://www.youtube.com/watch?v=UP1FnCfZPzc")
+
+
+class _LicenceDialog(QtWidgets.QDialog):
+    """Key-entry dialog shown when the local app is not installed."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("CCT Timing Pulleys — Activate")
+        self.setMinimumWidth(420)
+        self.setModal(True)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setSpacing(12)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        hdr = QtWidgets.QLabel("Enter Your Licence Key")
+        hdr.setStyleSheet(f"font-size:15px; font-weight:bold; color:{_CCT_RED};")
+        layout.addWidget(hdr)
+
+        info = QtWidgets.QLabel(
+            "Purchase a licence at <a href='https://cheapcadtools.com/product/"
+            "freecad-timing-pulley-addin/'>cheapcadtools.com</a> then paste "
+            "your key below.<br><br>"
+            "The key is in your order confirmation email."
+        )
+        info.setWordWrap(True)
+        info.setOpenExternalLinks(True)
+        info.setStyleSheet("font-size:12px;")
+        layout.addWidget(info)
+
+        self._key_input = QtWidgets.QLineEdit()
+        self._key_input.setPlaceholderText("CCT-XXXXXX-XXXXXX-XXXXXX-XXXXXX")
+        self._key_input.setStyleSheet(
+            "font-family:monospace; font-size:13px; padding:8px;"
+            " border:1px solid #ccc; border-radius:4px;"
+        )
+        layout.addWidget(self._key_input)
+
+        self._status = QtWidgets.QLabel("")
+        self._status.setWordWrap(True)
+        self._status.setStyleSheet("font-size:12px; min-height:20px;")
+        layout.addWidget(self._status)
+
+        btn_row = QtWidgets.QHBoxLayout()
+        self._btn_activate = QtWidgets.QPushButton("Activate")
+        self._btn_activate.setStyleSheet(
+            f"QPushButton {{ background:{_CCT_RED}; color:white; font-weight:bold;"
+            f" padding:9px 20px; border-radius:4px; font-size:12px; border:none; }}"
+            f"QPushButton:hover {{ background:#9b1e1e; }}"
+            f"QPushButton:disabled {{ background:#bbb; }}"
+        )
+        self._btn_activate.clicked.connect(self._do_activate)
+        btn_row.addWidget(self._btn_activate)
+
+        btn_cancel = QtWidgets.QPushButton("Cancel")
+        btn_cancel.setStyleSheet(
+            "QPushButton { background:#eaebed; color:#333; padding:9px 16px;"
+            " border-radius:4px; font-size:12px; border:1px solid #bbb; }"
+            "QPushButton:hover { background:#d4d5d7; }"
+        )
+        btn_cancel.clicked.connect(self.reject)
+        btn_row.addWidget(btn_cancel)
+        layout.addLayout(btn_row)
+
+    def _do_activate(self):
+        key = self._key_input.text().strip()
+        if not key:
+            self._status.setText("<span style='color:#c0392b;'>Please enter a licence key.</span>")
+            return
+        self._btn_activate.setEnabled(False)
+        self._btn_activate.setText("Activating…")
+        self._status.setText("")
+        QtWidgets.QApplication.processEvents()
+
+        result = _license.activate(key)
+
+        self._btn_activate.setEnabled(True)
+        self._btn_activate.setText("Activate")
+
+        if result.get("ok"):
+            until = result.get("valid_until", "")[:10]
+            self._status.setText(
+                f"<span style='color:#27ae60;'>&#10003; Activated! Valid until {until}.<br>"
+                f"Download PulleyApp from your order email or "
+                f"<a href='https://cheapcadtools.com'>cheapcadtools.com</a>.</span>"
+            )
+            self._status.setOpenExternalLinks(True)
+            self._btn_activate.setEnabled(False)
+        else:
+            msg = result.get("error", "Activation failed.")
+            self._status.setText(f"<span style='color:#c0392b;'>&#10007; {msg}</span>")
+
+    @classmethod
+    def show_and_activate(cls, parent=None):
+        dlg = cls(parent)
+        dlg.exec_()
 
 
 def _hline():
