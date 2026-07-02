@@ -322,6 +322,12 @@ class CCTDockPanel(QtWidgets.QDockWidget):
         webbrowser.open("https://www.youtube.com/watch?v=UP1FnCfZPzc")
 
 
+class _DownloadSignals(QtCore.QObject):
+    """Signals emitted from the download thread; Qt delivers them on the main thread."""
+    progress = QtCore.Signal(str, int)   # (message, pct)  pct=-1 → indeterminate
+    finished = QtCore.Signal(bool, str)  # (ok, valid_until)
+
+
 class _LicenceDialog(QtWidgets.QDialog):
     """Key-entry dialog shown when the local app is not installed."""
 
@@ -415,45 +421,56 @@ class _LicenceDialog(QtWidgets.QDialog):
             return
 
         # Key valid — start downloading in a background thread
-        app_url = result.get("app_url", "")
+        app_url  = result.get("app_url", "")
+        valid_until = result.get("valid_until", "")
+
         self._status.setText(
             "<span style='color:#27ae60;'>&#10003; Key accepted — downloading PulleyApp…</span>"
         )
         self._progress.setVisible(True)
-        self._progress.setRange(0, 0)   # indeterminate until we know total size
-        QtWidgets.QApplication.processEvents()
+        self._progress.setRange(0, 0)   # indeterminate until size is known
+
+        # Signals cross thread boundaries — only the main thread updates the UI
+        sigs = _DownloadSignals()
+        sigs.progress.connect(self._on_download_progress)
+        sigs.finished.connect(self._on_download_finished)
 
         def _install():
             def _progress(msg, pct=-1):
-                self._status.setText(f"<span style='color:#27ae60;'>{msg}</span>")
-                if pct >= 0:
-                    self._progress.setRange(0, 100)
-                    self._progress.setValue(pct)
-                else:
-                    self._progress.setRange(0, 0)   # keep indeterminate
-                QtWidgets.QApplication.processEvents()
+                sigs.progress.emit(msg, pct)
 
             ok = server.download_and_install(app_url, progress_cb=_progress)
-            self._progress.setVisible(False)
-            if ok:
-                until = result.get("valid_until", "")[:10]
-                self._status.setText(
-                    f"<span style='color:#27ae60;'>&#10003; Installed! Valid until {until}.<br>"
-                    f"Click <b>Launch</b> to start the local app.</span>"
-                )
-                self._btn_activate.setText("Launch")
-                self._btn_activate.setEnabled(True)
-                self._btn_activate.clicked.disconnect()
-                self._btn_activate.clicked.connect(self._do_launch)
-            else:
-                self._status.setText(
-                    "<span style='color:#c0392b;'>&#10007; Download failed — "
-                    "check your internet connection and try again.</span>"
-                )
-                self._btn_activate.setText("Retry")
-                self._btn_activate.setEnabled(True)
+            sigs.finished.emit(ok, valid_until)
 
         threading.Thread(target=_install, daemon=True).start()
+
+    def _on_download_progress(self, msg, pct):
+        self._status.setText(f"<span style='color:#27ae60;'>{msg}</span>")
+        if pct >= 0:
+            self._progress.setRange(0, 100)
+            self._progress.setValue(pct)
+        else:
+            self._progress.setRange(0, 0)
+
+    def _on_download_finished(self, ok, valid_until):
+        self._progress.setVisible(False)
+        if ok:
+            until = valid_until[:10]
+            self._status.setText(
+                f"<span style='color:#27ae60;'>&#10003; Installed! Valid until {until}.<br>"
+                f"Click <b>Launch</b> to start the local app.</span>"
+            )
+            self._btn_activate.setText("Launch")
+            self._btn_activate.setEnabled(True)
+            self._btn_activate.clicked.disconnect()
+            self._btn_activate.clicked.connect(self._do_launch)
+        else:
+            self._status.setText(
+                "<span style='color:#c0392b;'>&#10007; Download failed — "
+                "check your internet connection and try again.</span>"
+            )
+            self._btn_activate.setText("Retry")
+            self._btn_activate.setEnabled(True)
 
     def _do_launch(self):
         self._btn_activate.setEnabled(False)
