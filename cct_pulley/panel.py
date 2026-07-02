@@ -1,13 +1,13 @@
 """CCT Timing Pulleys dock panel."""
 from __future__ import annotations
 
-import os
+import threading
 import webbrowser
 
 try:
-    from PySide2 import QtWidgets, QtCore, QtGui
+    from PySide2 import QtWidgets, QtCore
 except ImportError:
-    from PySide6 import QtWidgets, QtCore, QtGui
+    from PySide6 import QtWidgets, QtCore
 
 import FreeCADGui
 
@@ -363,6 +363,17 @@ class _LicenceDialog(QtWidgets.QDialog):
         self._status.setStyleSheet("font-size:12px; min-height:20px;")
         layout.addWidget(self._status)
 
+        self._progress = QtWidgets.QProgressBar()
+        self._progress.setRange(0, 100)
+        self._progress.setValue(0)
+        self._progress.setVisible(False)
+        self._progress.setStyleSheet(
+            "QProgressBar { border:1px solid #ccc; border-radius:4px;"
+            " height:14px; text-align:center; font-size:11px; }"
+            f"QProgressBar::chunk {{ background:{_CCT_RED}; border-radius:3px; }}"
+        )
+        layout.addWidget(self._progress)
+
         btn_row = QtWidgets.QHBoxLayout()
         self._btn_activate = QtWidgets.QPushButton("Activate")
         self._btn_activate.setStyleSheet(
@@ -405,17 +416,25 @@ class _LicenceDialog(QtWidgets.QDialog):
 
         # Key valid — start downloading in a background thread
         app_url = result.get("app_url", "")
-        self._status.setText("<span style='color:#27ae60;'>&#10003; Key accepted — downloading PulleyApp…</span>")
+        self._status.setText(
+            "<span style='color:#27ae60;'>&#10003; Key accepted — downloading PulleyApp…</span>"
+        )
+        self._progress.setVisible(True)
+        self._progress.setRange(0, 0)   # indeterminate until we know total size
         QtWidgets.QApplication.processEvents()
 
-        import threading
-
         def _install():
-            def _progress(msg):
+            def _progress(msg, pct=-1):
                 self._status.setText(f"<span style='color:#27ae60;'>{msg}</span>")
+                if pct >= 0:
+                    self._progress.setRange(0, 100)
+                    self._progress.setValue(pct)
+                else:
+                    self._progress.setRange(0, 0)   # keep indeterminate
                 QtWidgets.QApplication.processEvents()
 
             ok = server.download_and_install(app_url, progress_cb=_progress)
+            self._progress.setVisible(False)
             if ok:
                 until = result.get("valid_until", "")[:10]
                 self._status.setText(

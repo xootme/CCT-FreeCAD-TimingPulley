@@ -131,7 +131,10 @@ atexit.register(stop_if_we_started)
 
 
 _INSTALL_DIR = os.path.join(_APPDATA, "CheapCADTools", "PulleyApp")
-_FALLBACK_URL = "https://github.com/xootme/PulleyApp-releases/releases/latest/download/PulleyApp.zip"
+_FALLBACK_URL = (
+    "https://github.com/xootme/PulleyApp-releases"
+    "/releases/latest/download/PulleyApp.zip"
+)
 
 
 def download_and_install(app_url: str = '', progress_cb=None) -> bool:
@@ -153,9 +156,12 @@ def download_and_install(app_url: str = '', progress_cb=None) -> bool:
             tmp_path = tmp.name
 
         def _reporthook(block, block_size, total):
-            if total > 0 and progress_cb:
-                pct = min(100, int(block * block_size * 100 / total))
-                progress_cb(f"Downloading… {pct}%")
+            if progress_cb:
+                if total > 0:
+                    pct = min(100, int(block * block_size * 100 / total))
+                    progress_cb(f"Downloading… {pct}%", pct)
+                else:
+                    progress_cb("Downloading…", -1)
 
         urllib.request.urlretrieve(url, tmp_path, _reporthook)
         _report("Installing…")
